@@ -4,13 +4,16 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.models import AuditLog, User
-from app.schemas import AuditLogCreate, AuditLogResponse
+from app.schemas import AuditLogCreate, AuditLogUpdate, AuditLogResponse
 from app.dependencies import get_current_user
+from app.services.audit import AuditLogService
 
 router = APIRouter(
     prefix="/api/audit",
     tags=["Audit"],
 )
+
+audit_service = AuditLogService()
 
 
 @router.get("/", response_model=List[AuditLogResponse])
@@ -22,19 +25,16 @@ def get_audit_logs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(AuditLog)
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
-    # Filter by hospital - only show logs for assets in user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if hospital_id:
-        query = query.join(AuditLog.asset).filter(AuditLog.asset.has(hospital_id=hospital_id))
+    if entity_type and entity_id:
+        # Get audit logs for specific entity (with hospital verification)
+        audit_logs = audit_service.get_multi_by_entity(db, hospital_id, entity_type, entity_id, skip, limit)
+    else:
+        # Get all audit logs for hospital
+        audit_logs = audit_service.get_multi(db, hospital_id, skip, limit)
 
-    if entity_type:
-        query = query.filter(AuditLog.entity_type == entity_type)
-    if entity_id:
-        query = query.filter(AuditLog.entity_id == entity_id)
-
-    audit_logs = query.offset(skip).limit(limit).all()
     return audit_logs
 
 
@@ -44,15 +44,12 @@ def get_audit_log(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    audit_log = db.query(AuditLog).filter(AuditLog.id == audit_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    audit_log = audit_service.get(db, audit_id, hospital_id)
     if audit_log is None:
         raise HTTPException(status_code=404, detail="Audit log not found")
-
-    # Verify audit log belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if not audit_log.asset or audit_log.asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this audit log")
-
     return audit_log
 
 
@@ -62,29 +59,65 @@ def create_audit_log(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
     # Verify user exists and belongs to same hospital if user_id is provided
     if audit_log.user_id:
         user = db.query(User).filter(User.id == audit_log.user_id).first()
         if not user:
             raise HTTPException(status_code=400, detail="User not found")
-
-        hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
         if user.hospital_id != hospital_id:
             raise HTTPException(status_code=400, detail="User does not belong to this hospital")
 
     # Verify asset belongs to hospital if entity_type is asset
-    if audit_log.entity_type.lower() == "asset" and audit_log.entity_id:
-        asset = db.query(User.hospital_id).join(
-            Asset, Asset.hospital_id == User.hospital_id
-        ).filter(
+    if audit_log.entity_type and audit_log.entity_type.lower() == "asset" and audit_log.entity_id:
+        asset = db.query(Asset).filter(
             Asset.id == audit_log.entity_id,
-            User.id == current_user["user"].id
+            Asset.hospital_id == hospital_id
         ).first()
         if not asset:
             raise HTTPException(status_code=400, detail="Asset does not belong to this hospital")
 
-    db_audit_log = AuditLog(**audit_log.dict())
-    db.add(db_audit_log)
-    db.commit()
-    db.refresh(db_audit_log)
-    return db_audit_log
+    # Prepare audit log data
+    audit_log_data = audit_log.dict()
+
+    return audit_service.create(db, obj_in=audit_log_data)
+
+
+@router.put("/{audit_id}", response_model=AuditLogResponse)
+def update_audit_log(
+    audit_id: int,
+    audit_log: AuditLogUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing audit log and verify it belongs to the hospital
+    db_audit_log = audit_service.get(db, audit_id, hospital_id)
+    if db_audit_log is None:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+
+    # Update audit log
+    return audit_service.update(db, db_obj=db_audit_log, obj_in=audit_log)
+
+
+@router.delete("/{audit_id}")
+def delete_audit_log(
+    audit_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing audit log and verify it belongs to the hospital
+    db_audit_log = audit_service.get(db, audit_id, hospital_id)
+    if db_audit_log is None:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+
+    # Delete audit log
+    audit_service.remove(db, id=audit_id)
+    return {"message": "Audit log deleted successfully"}

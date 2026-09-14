@@ -4,13 +4,16 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.models import AssetMovement, Asset, Department, Location, User
-from app.schemas import AssetMovementCreate, AssetMovementResponse
+from app.schemas import AssetMovementCreate, AssetMovementUpdate, AssetMovementResponse
 from app.dependencies import get_current_user
+from app.services.movement import AssetMovementService
 
 router = APIRouter(
     prefix="/api/movements",
     tags=["Movements"],
 )
+
+movement_service = AssetMovementService()
 
 
 @router.get("/", response_model=List[AssetMovementResponse])
@@ -21,17 +24,16 @@ def get_movements(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(AssetMovement)
-
-    # Filter by hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if hospital_id:
-        query = query.join(Asset).filter(Asset.hospital_id == hospital_id)
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     if asset_id:
-        query = query.filter(AssetMovement.asset_id == asset_id)
+        # Get movements for specific asset (with hospital verification)
+        movements = movement_service.get_multi_by_asset(db, hospital_id, asset_id, skip, limit)
+    else:
+        # Get all movements for hospital
+        movements = movement_service.get_multi(db, hospital_id, skip, limit)
 
-    movements = query.offset(skip).limit(limit).all()
     return movements
 
 
@@ -41,16 +43,12 @@ def get_movement(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    movement = db.query(AssetMovement).filter(AssetMovement.id == movement_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    movement = movement_service.get(db, movement_id, hospital_id)
     if movement is None:
         raise HTTPException(status_code=404, detail="Movement not found")
-
-    # Verify movement belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == movement.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this movement")
-
     return movement
 
 
@@ -60,10 +58,8 @@ def create_movement(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Verify hospital exists
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if not hospital_id:
-        raise HTTPException(status_code=400, detail="User not associated with a hospital")
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     # Verify asset belongs to hospital
     asset = db.query(Asset).filter(
@@ -114,11 +110,29 @@ def create_movement(
     if not mover or mover.hospital_id != hospital_id:
         raise HTTPException(status_code=400, detail="Mover does not belong to this hospital")
 
-    db_movement = AssetMovement(**movement.dict())
-    db.add(db_movement)
-    db.commit()
-    db.refresh(db_movement)
-    return db_movement
+    # Prepare movement data
+    movement_data = movement.dict()
+
+    return movement_service.create(db, obj_in=movement_data)
+
+
+@router.put("/{movement_id}", response_model=AssetMovementResponse)
+def update_movement(
+    movement_id: int,
+    movement: AssetMovementUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing movement and verify it belongs to the hospital
+    db_movement = movement_service.get(db, movement_id, hospital_id)
+    if db_movement is None:
+        raise HTTPException(status_code=404, detail="Movement not found")
+
+    # Update movement
+    return movement_service.update(db, db_obj=db_movement, obj_in=movement)
 
 
 @router.delete("/{movement_id}")
@@ -127,16 +141,14 @@ def delete_movement(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    db_movement = db.query(AssetMovement).filter(AssetMovement.id == movement_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing movement and verify it belongs to the hospital
+    db_movement = movement_service.get(db, movement_id, hospital_id)
     if db_movement is None:
         raise HTTPException(status_code=404, detail="Movement not found")
 
-    # Verify movement belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == db_movement.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this movement")
-
-    db.delete(db_movement)
-    db.commit()
+    # Delete movement
+    movement_service.remove(db, id=movement_id)
     return {"message": "Movement deleted successfully"}

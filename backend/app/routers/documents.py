@@ -4,13 +4,16 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.models import AssetDocument, Asset, User
-from app.schemas import AssetDocumentCreate, AssetDocumentResponse
+from app.schemas import AssetDocumentCreate, AssetDocumentUpdate, AssetDocumentResponse
 from app.dependencies import get_current_user
+from app.services.document import AssetDocumentService
 
 router = APIRouter(
     prefix="/api/documents",
     tags=["Documents"],
 )
+
+document_service = AssetDocumentService()
 
 
 @router.get("/", response_model=List[AssetDocumentResponse])
@@ -21,17 +24,16 @@ def get_documents(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(AssetDocument)
-
-    # Filter by hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if hospital_id:
-        query = query.join(Asset).filter(Asset.hospital_id == hospital_id)
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     if asset_id:
-        query = query.filter(AssetDocument.asset_id == asset_id)
+        # Get documents for specific asset (with hospital verification)
+        documents = document_service.get_multi_by_asset(db, hospital_id, asset_id, skip, limit)
+    else:
+        # Get all documents for hospital
+        documents = document_service.get_multi(db, hospital_id, skip, limit)
 
-    documents = query.offset(skip).limit(limit).all()
     return documents
 
 
@@ -41,16 +43,12 @@ def get_document(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    document = db.query(AssetDocument).filter(AssetDocument.id == document_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    document = document_service.get(db, document_id, hospital_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    # Verify document belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == document.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this document")
-
     return document
 
 
@@ -60,10 +58,8 @@ def create_document(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Verify hospital exists
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if not hospital_id:
-        raise HTTPException(status_code=400, detail="User not associated with a hospital")
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     # Verify asset belongs to hospital
     asset = db.query(Asset).filter(
@@ -73,16 +69,29 @@ def create_document(
     if not asset:
         raise HTTPException(status_code=400, detail="Asset does not belong to this hospital")
 
-    # Verify uploaded_by user exists and belongs to hospital
-    uploader = db.query(User).filter(User.id == document.uploaded_by).first()
-    if not uploader or uploader.hospital_id != hospital_id:
-        raise HTTPException(status_code=400, detail="Uploader does not belong to this hospital")
+    # Prepare document data
+    document_data = document.dict()
 
-    db_document = AssetDocument(**document.dict())
-    db.add(db_document)
-    db.commit()
-    db.refresh(db_document)
-    return db_document
+    return document_service.create(db, obj_in=document_data)
+
+
+@router.put("/{document_id}", response_model=AssetDocumentResponse)
+def update_document(
+    document_id: int,
+    document: AssetDocumentUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing document and verify it belongs to the hospital
+    db_document = document_service.get(db, document_id, hospital_id)
+    if db_document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Update document
+    return document_service.update(db, db_obj=db_document, obj_in=document)
 
 
 @router.delete("/{document_id}")
@@ -91,16 +100,14 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    db_document = db.query(AssetDocument).filter(AssetDocument.id == document_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing document and verify it belongs to the hospital
+    db_document = document_service.get(db, document_id, hospital_id)
     if db_document is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Verify document belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == db_document.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this document")
-
-    db.delete(db_document)
-    db.commit()
+    # Delete document
+    document_service.remove(db, id=document_id)
     return {"message": "Document deleted successfully"}

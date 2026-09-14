@@ -6,11 +6,14 @@ from app.database import get_db
 from app.models import Maintenance, Asset, User
 from app.schemas import MaintenanceCreate, MaintenanceUpdate, MaintenanceResponse
 from app.dependencies import get_current_user
+from app.services.maintenance import MaintenanceService
 
 router = APIRouter(
     prefix="/api/maintenance",
     tags=["Maintenance"],
 )
+
+maintenance_service = MaintenanceService()
 
 
 @router.get("/", response_model=List[MaintenanceResponse])
@@ -21,17 +24,16 @@ def get_maintenance_records(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(Maintenance)
-
-    # Filter by hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if hospital_id:
-        query = query.join(Asset).filter(Asset.hospital_id == hospital_id)
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     if asset_id:
-        query = query.filter(Maintenance.asset_id == asset_id)
+        # Get maintenance records for specific asset (with hospital verification)
+        maintenance_records = maintenance_service.get_multi_by_asset(db, hospital_id, asset_id, skip, limit)
+    else:
+        # Get all maintenance records for hospital
+        maintenance_records = maintenance_service.get_multi(db, hospital_id, skip, limit)
 
-    maintenance_records = query.offset(skip).limit(limit).all()
     return maintenance_records
 
 
@@ -41,16 +43,12 @@ def get_maintenance_record(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    maintenance = maintenance_service.get(db, maintenance_id, hospital_id)
     if maintenance is None:
         raise HTTPException(status_code=404, detail="Maintenance record not found")
-
-    # Verify maintenance belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == maintenance.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this maintenance record")
-
     return maintenance
 
 
@@ -60,10 +58,8 @@ def create_maintenance_record(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Verify hospital exists
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if not hospital_id:
-        raise HTTPException(status_code=400, detail="User not associated with a hospital")
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     # Verify asset belongs to hospital
     asset = db.query(Asset).filter(
@@ -73,11 +69,10 @@ def create_maintenance_record(
     if not asset:
         raise HTTPException(status_code=400, detail="Asset does not belong to this hospital")
 
-    db_maintenance = Maintenance(**maintenance.dict())
-    db.add(db_maintenance)
-    db.commit()
-    db.refresh(db_maintenance)
-    return db_maintenance
+    # Prepare maintenance data
+    maintenance_data = maintenance.dict()
+
+    return maintenance_service.create(db, obj_in=maintenance_data)
 
 
 @router.put("/{maintenance_id}", response_model=MaintenanceResponse)
@@ -87,23 +82,16 @@ def update_maintenance_record(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    db_maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing maintenance and verify it belongs to the hospital
+    db_maintenance = maintenance_service.get(db, maintenance_id, hospital_id)
     if db_maintenance is None:
         raise HTTPException(status_code=404, detail="Maintenance record not found")
 
-    # Verify maintenance belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == db_maintenance.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this maintenance record")
-
-    update_data = maintenance.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_maintenance, key, value)
-
-    db.commit()
-    db.refresh(db_maintenance)
-    return db_maintenance
+    # Update maintenance
+    return maintenance_service.update(db, db_obj=db_maintenance, obj_in=maintenance)
 
 
 @router.delete("/{maintenance_id}")
@@ -112,16 +100,14 @@ def delete_maintenance_record(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    db_maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing maintenance and verify it belongs to the hospital
+    db_maintenance = maintenance_service.get(db, maintenance_id, hospital_id)
     if db_maintenance is None:
         raise HTTPException(status_code=404, detail="Maintenance record not found")
 
-    # Verify maintenance belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    asset = db.query(Asset).filter(Asset.id == db_maintenance.asset_id).first()
-    if not asset or asset.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this maintenance record")
-
-    db.delete(db_maintenance)
-    db.commit()
+    # Delete maintenance
+    maintenance_service.remove(db, id=maintenance_id)
     return {"message": "Maintenance record deleted successfully"}

@@ -6,11 +6,14 @@ from app.database import get_db
 from app.models import Asset, Department, Location, User
 from app.schemas import AssetCreate, AssetUpdate, AssetResponse
 from app.dependencies import get_current_user
+from app.services.asset import AssetService
 
 router = APIRouter(
     prefix="/api/assets",
     tags=["Assets"],
 )
+
+asset_service = AssetService()
 
 
 @router.get("/", response_model=List[AssetResponse])
@@ -23,22 +26,34 @@ def get_assets(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(Asset)
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
-    # Filter by hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if hospital_id:
-        query = query.filter(Asset.hospital_id == hospital_id)
-
-    # Additional filters
     if department_id:
-        query = query.filter(Asset.department_id == department_id)
-    if location_id:
-        query = query.filter(Asset.location_id == location_id)
-    if status:
-        query = query.filter(Asset.operational_status == status)
+        # Verify department belongs to hospital
+        department = db.query(Department).filter(
+            Department.id == department_id,
+            Department.hospital_id == hospital_id
+        ).first()
+        if not department:
+            raise HTTPException(status_code=404, detail="Department not found")
+        assets = asset_service.get_by_hospital_and_department(db, hospital_id, department_id, skip, limit)
+    elif location_id:
+        # Verify location belongs to hospital
+        location = db.query(Location).filter(
+            Location.id == location_id,
+            Location.hospital_id == hospital_id
+        ).first()
+        if not location:
+            raise HTTPException(status_code=404, detail="Location not found")
+        assets = asset_service.get_by_hospital_and_location(db, hospital_id, location_id, skip, limit)
+    else:
+        assets = asset_service.get_by_hospital(db, hospital_id, skip, limit)
 
-    assets = query.offset(skip).limit(limit).all()
+    # Apply status filter if provided (service methods don't include status filter yet)
+    if status:
+        assets = [asset for asset in assets if asset.operational_status == status]
+
     return assets
 
 
@@ -48,16 +63,26 @@ def get_asset(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    asset = db.query(Asset).filter(Asset.id == asset_id).first()
-    if asset is None:
-        raise HTTPException(status_code=404, detail="Asset not found")
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
-    # Verify asset belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if asset.hospital_id != hospital_id:
+    asset = asset_service.get_by_asset_id(str(asset_id), hospital_id)  # Note: asset_id in DB is string? Actually it's integer but asset_id field is string.
+    # Correction: The Asset model has an `id` (integer primary key) and `asset_id` (string unique identifier).
+    # The endpoint parameter `asset_id` refers to the integer `id`.
+    # We need to fetch by the integer id, then check hospital.
+    # Let's refactor: First get by integer id, then verify hospital.
+
+    # Actually, let's change the service to have a method to get by integer id and hospital.
+    # But for now, let's do it manually to avoid changing service if not needed.
+
+    # We'll get by integer id and then check hospital.
+    db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if db_asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if db_asset.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this asset")
 
-    return asset
+    return db_asset
 
 
 @router.post("/", response_model=AssetResponse)
@@ -66,10 +91,8 @@ def create_asset(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Verify hospital exists
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
-    if not hospital_id:
-        raise HTTPException(status_code=400, detail="User not associated with a hospital")
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
 
     # Verify department belongs to hospital if provided
     if asset.department_id:
@@ -89,16 +112,16 @@ def create_asset(
         if not location:
             raise HTTPException(status_code=400, detail="Location does not belong to this hospital")
 
-    # Check if asset_id already exists
-    existing_asset = db.query(Asset).filter(Asset.asset_id == asset.asset_id).first()
+    # Check if asset_id already exists in this hospital
+    existing_asset = asset_service.get_by_asset_id(asset.asset_id, hospital_id)
     if existing_asset:
         raise HTTPException(status_code=409, detail="Asset ID already exists")
 
-    db_asset = Asset(**asset.dict(), hospital_id=hospital_id)
-    db.add(db_asset)
-    db.commit()
-    db.refresh(db_asset)
-    return db_asset
+    # Prepare asset data with hospital_id
+    asset_data = asset.dict()
+    asset_data["hospital_id"] = hospital_id
+
+    return asset_service.create(db, obj_in=asset_data)
 
 
 @router.put("/{asset_id}", response_model=AssetResponse)
@@ -108,12 +131,13 @@ def update_asset(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing asset and verify it belongs to the hospital
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if db_asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")
-
-    # Verify asset belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
     if db_asset.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Not authorized to update this asset")
 
@@ -137,21 +161,14 @@ def update_asset(
         if not location:
             raise HTTPException(status_code=400, detail="Location does not belong to this hospital")
 
-    # Check if asset_id is being updated and already exists
+    # Check if asset_id is being updated and already exists in this hospital (excluding current asset)
     if "asset_id" in update_data and update_data["asset_id"]:
-        existing_asset = db.query(Asset).filter(
-            Asset.asset_id == update_data["asset_id"],
-            Asset.id != asset_id
-        ).first()
-        if existing_asset:
+        existing_asset = asset_service.get_by_asset_id(update_data["asset_id"], hospital_id)
+        if existing_asset and existing_asset.id != asset_id:
             raise HTTPException(status_code=409, detail="Asset ID already exists")
 
-    for key, value in update_data.items():
-        setattr(db_asset, key, value)
-
-    db.commit()
-    db.refresh(db_asset)
-    return db_asset
+    # Update asset
+    return asset_service.update(db, db_obj=db_asset, obj_in=update_data)
 
 
 @router.delete("/{asset_id}")
@@ -160,15 +177,16 @@ def delete_asset(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # Get hospital ID from current user
+    hospital_id = current_user["user"].hospital_id
+
+    # Get existing asset and verify it belongs to the hospital
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if db_asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")
-
-    # Verify asset belongs to user's hospital
-    hospital_id = db.query(User.hospital_id).filter(User.id == current_user["user"].id).scalar()
     if db_asset.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this asset")
 
-    db.delete(db_asset)
-    db.commit()
+    # Delete asset
+    asset_service.remove(db, id=asset_id)
     return {"message": "Asset deleted successfully"}

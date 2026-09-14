@@ -60,6 +60,11 @@ def create_department(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin can create departments
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to create departments")
 
     # Check if department code already exists in this hospital
     existing = department_service.get_by_code(db, department.code, hospital_id)
@@ -84,6 +89,11 @@ def update_department(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin can update departments
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to update departments")
 
     # Get existing department and verify it belongs to the hospital
     db_department = db.query(Department).filter(
@@ -114,6 +124,11 @@ def delete_department(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin can delete departments
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete departments")
 
     # Get existing department and verify it belongs to the hospital
     db_department = db.query(Department).filter(

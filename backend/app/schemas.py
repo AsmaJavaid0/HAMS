@@ -138,9 +138,9 @@ class AssetResponse(AssetBase):
 class MaintenanceBase(BaseModel):
     maintenance_date: datetime
     status: str
-    technician_name: str = Field(min_length=1, max_length=200)
+    technician_name: Optional[str] = Field(None, min_length=1, max_length=200)
     vendor_name: Optional[str] = Field(None, max_length=200)
-    maintenance_type: str = Field(min_length=1, max_length=100)
+    maintenance_type: Optional[str] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = None
     next_maintenance_date: Optional[datetime] = None
 

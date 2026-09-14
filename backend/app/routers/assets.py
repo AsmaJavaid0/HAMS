@@ -141,9 +141,8 @@ def update_asset(
     hospital_id = current_user["user"].hospital_id
     user_role = current_user["role"]
 
-    # Check authorization: only admin and biomedical can update assets (biomedical for operational status only)
-    # For now, we'll allow admin and biomedical to update (frontend should restrict what they can edit)
-    if user_role not in ["admin", "biomedical"]:
+    # Check authorization: only admin can update assets
+    if user_role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to update assets")
 
     # Get existing asset and verify it belongs to the hospital

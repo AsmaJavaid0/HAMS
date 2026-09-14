@@ -106,6 +106,12 @@ class User(Base):
         nullable=False,
     )
 
+    department_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("departments.id"),
+        nullable=True,
+    )
+
     full_name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
@@ -139,6 +145,7 @@ class User(Base):
     # Relationships
     hospital = relationship("Hospital", back_populates="users")
     role = relationship("Role", back_populates="users")
+    department = relationship("Department")
     managed_departments = relationship("Department", foreign_keys="[Department.manager_id]", back_populates="manager")
     uploaded_documents = relationship("AssetDocument", back_populates="uploader")
     moved_assets = relationship("AssetMovement", foreign_keys="[AssetMovement.moved_by]", back_populates="mover")
@@ -443,9 +450,9 @@ class Maintenance(Base):
         nullable=False,
     )
 
-    technician_name: Mapped[str] = mapped_column(
+    technician_name: Mapped[str | None] = mapped_column(
         String(200),
-        nullable=False,
+        nullable=True,
     )
 
     vendor_name: Mapped[str | None] = mapped_column(
@@ -453,9 +460,9 @@ class Maintenance(Base):
         nullable=True,
     )
 
-    maintenance_type: Mapped[str] = mapped_column(
+    maintenance_type: Mapped[str | None] = mapped_column(
         String(100),
-        nullable=False,
+        nullable=True,
     )
 
     notes: Mapped[str | None] = mapped_column(

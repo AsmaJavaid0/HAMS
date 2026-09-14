@@ -27,12 +27,6 @@ const ROLE_ASSET_PERMISSIONS: Record<UserRole, AssetPermission[]> = {
     'manageDocuments',
     'manageMaintenance'
   ],
-  manager: [
-    'view',
-    'editOperational',
-    'move',
-    'manageMaintenance'
-  ],
   nurse: ['view']
 }
 

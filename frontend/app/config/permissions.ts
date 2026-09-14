@@ -8,21 +8,13 @@ export const PUBLIC_ROUTES = [
 
 export const ROLE_HOME: Record<UserRole, string> = {
   admin: '/admin/dashboard',
-
-  manager: '/dashboard/manager',
-
   biomedical: '/dashboard/biomedical',
-
   nurse: '/dashboard/nurse'
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Hospital Administrator',
-
-  manager: 'Department Manager',
-
   biomedical: 'Biomedical Engineer',
-
   nurse: 'Clinical Staff'
 }
 
@@ -30,7 +22,6 @@ export const ROLE_SHORT_LABELS:
 Record<UserRole, string> = {
   admin: 'Admin',
 
-  manager: 'Manager',
 
   biomedical: 'Biomedical',
 
@@ -51,7 +42,6 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
 
     roles: [
       'admin',
-      'manager',
       'biomedical',
       'nurse'
     ]
@@ -60,11 +50,6 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   {
     prefix: '/admin',
     roles: ['admin']
-  },
-
-  {
-    prefix: '/dashboard/manager',
-    roles: ['manager']
   },
 
   {

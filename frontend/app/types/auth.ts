@@ -1,6 +1,5 @@
 export type UserRole =
   | 'admin'
-  | 'manager'
   | 'biomedical'
   | 'nurse'
 

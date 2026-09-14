@@ -207,27 +207,10 @@ const availableDepartments =
 
 const availableLocations =
   computed(() => {
-
-    if (
-      !departmentId.value
-    ) {
-      return []
-    }
-
-
+    // For V1, show all active locations regardless of department selection
+    // Room No. is the primary asset location
     return props.locations.filter(
       location => {
-
-        const belongsToDepartment =
-          location.departmentId ===
-            departmentId.value
-
-
-        if (!belongsToDepartment) {
-          return false
-        }
-
-
         return (
           location.status ===
             'Active' ||
@@ -445,22 +428,10 @@ const handleSubmit = () => {
   }
 
 
-  if (!departmentId.value) {
-
-    departmentError.value =
-      'Department is required.'
-
-    valid = false
-  }
+  // Department is now optional for V1 - no validation error
 
 
-  if (!locationId.value) {
-
-    locationError.value =
-      'Location is required.'
-
-    valid = false
-  }
+  // Location is now optional for V1 - no validation error
 
 
   if (
@@ -505,11 +476,7 @@ const handleSubmit = () => {
   }
 
 
-  if (
-    !valid ||
-    !departmentId.value ||
-    !locationId.value
-  ) {
+  if (!valid) {
     return
   }
 
@@ -739,7 +706,7 @@ const handleSubmit = () => {
               <label
                 class="mb-2 block text-sm font-medium text-text-primary"
               >
-                Department *
+                Department
               </label>
 
               <select
@@ -780,7 +747,7 @@ const handleSubmit = () => {
               <label
                 class="mb-2 block text-sm font-medium text-text-primary"
               >
-                Current Location *
+                Room No.
               </label>
 
               <select
@@ -790,11 +757,7 @@ const handleSubmit = () => {
               >
 
                 <option :value="null">
-                  {{
-                    departmentId
-                      ? 'Select location'
-                      : 'Select department first'
-                  }}
+                  Select room
                 </option>
 
                 <option

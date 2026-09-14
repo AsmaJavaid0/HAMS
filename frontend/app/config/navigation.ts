@@ -8,14 +8,12 @@ export const PUBLIC_ROUTES = [
 
 export const ROLE_HOME: Record<UserRole, string> = {
   admin: '/admin/dashboard',
-  manager: '/dashboard/manager',
   biomedical: '/dashboard/biomedical',
   nurse: '/dashboard/nurse'
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Hospital Administrator',
-  manager: 'Department Manager',
   biomedical: 'Biomedical Engineer',
   nurse: 'Clinical Staff'
 }
@@ -42,14 +40,9 @@ export const NAVIGATION_BY_ROLE: Record<
       to: '/admin/assets'
     },
     {
-      label: 'Departments',
-      icon: '▤',
-      to: '/admin/departments'
-    },
-    {
-      label: 'Hospital',
-      icon: '▥',
-      to: '/admin/hospital'
+      label: 'Maintenance',
+      icon: '⚙',
+      to: '/admin/maintenance'
     },
     {
       label: 'Staff',
@@ -62,21 +55,9 @@ export const NAVIGATION_BY_ROLE: Record<
       to: '/admin/audit'
     },
     {
-      label: 'Reports',
-      icon: '▤',
-      to: '/admin/reports'
-    }
-  ],
-  manager: [
-    {
-      label: 'Dashboard',
-      icon: '▦',
-      to: '/dashboard/manager'
-    },
-    {
-      label: 'Assets',
-      icon: '▣',
-      to: '/assets'
+      label: 'Logout',
+      icon: '⏏',
+      to: '/auth/logout'
     }
   ],
   biomedical: [
@@ -89,6 +70,16 @@ export const NAVIGATION_BY_ROLE: Record<
       label: 'Assets',
       icon: '▣',
       to: '/assets'
+    },
+    {
+      label: 'Maintenance',
+      icon: '⚙',
+      to: '/maintenance'
+    },
+    {
+      label: 'Logout',
+      icon: '⏏',
+      to: '/auth/logout'
     }
   ],
   nurse: [
@@ -96,6 +87,21 @@ export const NAVIGATION_BY_ROLE: Record<
       label: 'Dashboard',
       icon: '▦',
       to: '/dashboard/nurse'
+    },
+    {
+      label: 'My Assets',
+      icon: '▣',
+      to: '/assets/my'
+    },
+    {
+      label: 'Report Fault',
+      icon: '⚠',
+      to: '/fault-report'
+    },
+    {
+      label: 'Logout',
+      icon: '⏏',
+      to: '/auth/logout'
     }
   ]
 }
@@ -111,15 +117,23 @@ const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
     roles: ['admin']
   },
   {
-    prefix: '/dashboard/manager',
-    roles: ['manager']
-  },
-  {
     prefix: '/dashboard/biomedical',
     roles: ['biomedical']
   },
   {
     prefix: '/dashboard/nurse',
+    roles: ['nurse']
+  },
+  {
+    prefix: '/assets',
+    roles: ['admin', 'biomedical', 'nurse']
+  },
+  {
+    prefix: '/maintenance',
+    roles: ['admin', 'biomedical']
+  },
+  {
+    prefix: '/fault-report',
     roles: ['nurse']
   }
 ]

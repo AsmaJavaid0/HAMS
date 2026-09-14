@@ -40,16 +40,12 @@ const scopedAssets = computed(() => assets.value.filter(asset =>
 ))
 
 const searchQuery = ref('')
-const departmentFilter = ref<number | 'All'>('All')
-const locationFilter = ref<number | 'All'>('All')
 const categoryFilter = ref<'All' | AssetCategory>('All')
 const statusFilter = ref<'All' | AssetOperationalStatus>('All')
 const conditionFilter = ref<'All' | AssetCondition>('All')
 
 const hasActiveFilters = computed(() => Boolean(
   searchQuery.value ||
-  departmentFilter.value !== 'All' ||
-  locationFilter.value !== 'All' ||
   categoryFilter.value !== 'All' ||
   statusFilter.value !== 'All' ||
   conditionFilter.value !== 'All'
@@ -57,8 +53,6 @@ const hasActiveFilters = computed(() => Boolean(
 
 const resetFilters = () => {
   searchQuery.value = ''
-  departmentFilter.value = 'All'
-  locationFilter.value = 'All'
   categoryFilter.value = 'All'
   statusFilter.value = 'All'
   conditionFilter.value = 'All'
@@ -96,12 +90,10 @@ const filteredAssets = computed(() => {
       asset.serialNumber.toLowerCase().includes(query) ||
       asset.manufacturer.toLowerCase().includes(query) ||
       asset.model.toLowerCase().includes(query)
-    const matchesDepartment = departmentFilter.value === 'All' || asset.departmentId === departmentFilter.value
-    const matchesLocation = locationFilter.value === 'All' || asset.locationId === locationFilter.value
     const matchesCategory = categoryFilter.value === 'All' || asset.category === categoryFilter.value
     const matchesStatus = statusFilter.value === 'All' || asset.operationalStatus === statusFilter.value
     const matchesCondition = conditionFilter.value === 'All' || asset.condition === conditionFilter.value
-    return matchesSearch && matchesDepartment && matchesLocation && matchesCategory && matchesStatus && matchesCondition
+    return matchesSearch && matchesCategory && matchesStatus && matchesCondition
   })
 })
 
@@ -218,14 +210,6 @@ const getStatusClass = (status: AssetOperationalStatus) => {
     <div class="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
       <input v-model="searchQuery" type="text" placeholder="Search asset ID, name, serial, manufacturer or model..." class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary" />
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <select v-model="departmentFilter" class="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm">
-          <option value="All">All Departments</option>
-          <option v-for="department in filterDepartments" :key="department.id" :value="department.id">{{ department.name }}</option>
-        </select>
-        <select v-model="locationFilter" class="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm">
-          <option value="All">All Locations</option>
-          <option v-for="location in filterLocations" :key="location.id" :value="location.id">{{ location.name }}</option>
-        </select>
         <select v-model="categoryFilter" class="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm">
           <option value="All">All Categories</option>
           <option v-for="item in ASSET_CATEGORIES" :key="item" :value="item">{{ item }}</option>

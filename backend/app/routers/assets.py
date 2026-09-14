@@ -28,6 +28,11 @@ def get_assets(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: all roles can view assets (with hospital isolation)
+    if user_role not in ["admin", "nurse", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access assets")
 
     if department_id:
         # Verify department belongs to hospital
@@ -65,15 +70,11 @@ def get_asset(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
 
-    asset = asset_service.get_by_asset_id(str(asset_id), hospital_id)  # Note: asset_id in DB is string? Actually it's integer but asset_id field is string.
-    # Correction: The Asset model has an `id` (integer primary key) and `asset_id` (string unique identifier).
-    # The endpoint parameter `asset_id` refers to the integer `id`.
-    # We need to fetch by the integer id, then check hospital.
-    # Let's refactor: First get by integer id, then verify hospital.
-
-    # Actually, let's change the service to have a method to get by integer id and hospital.
-    # But for now, let's do it manually to avoid changing service if not needed.
+    # Check authorization: all roles can view assets (with hospital isolation)
+    if user_role not in ["admin", "nurse", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access assets")
 
     # We'll get by integer id and then check hospital.
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
@@ -93,6 +94,11 @@ def create_asset(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin can create assets
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to create assets")
 
     # Verify department belongs to hospital if provided
     if asset.department_id:
@@ -133,6 +139,12 @@ def update_asset(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin and biomedical can update assets (biomedical for operational status only)
+    # For now, we'll allow admin and biomedical to update (frontend should restrict what they can edit)
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to update assets")
 
     # Get existing asset and verify it belongs to the hospital
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
@@ -179,6 +191,11 @@ def delete_asset(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: only admin can delete assets
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete assets")
 
     # Get existing asset and verify it belongs to the hospital
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()

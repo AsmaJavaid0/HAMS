@@ -25,6 +25,12 @@ def get_departments(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can view departments
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view departments")
+
     departments = department_service.get_by_hospital(db, hospital_id, skip, limit)
     return departments
 

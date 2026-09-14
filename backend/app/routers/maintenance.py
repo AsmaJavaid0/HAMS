@@ -26,6 +26,11 @@ def get_maintenance_records(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can view maintenance records
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view maintenance records")
 
     if asset_id:
         # Get maintenance records for specific asset (with hospital verification)
@@ -45,6 +50,11 @@ def get_maintenance_record(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can view maintenance records
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view maintenance records")
 
     maintenance = maintenance_service.get(db, maintenance_id, hospital_id)
     if maintenance is None:
@@ -60,6 +70,11 @@ def create_maintenance_record(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can create maintenance records
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to create maintenance records")
 
     # Verify asset belongs to hospital
     asset = db.query(Asset).filter(
@@ -84,6 +99,11 @@ def update_maintenance_record(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can update maintenance records
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to update maintenance records")
 
     # Get existing maintenance and verify it belongs to the hospital
     db_maintenance = maintenance_service.get(db, maintenance_id, hospital_id)
@@ -102,6 +122,11 @@ def delete_maintenance_record(
 ):
     # Get hospital ID from current user
     hospital_id = current_user["user"].hospital_id
+    user_role = current_user["role"]
+
+    # Check authorization: admin and biomedical can delete maintenance records
+    if user_role not in ["admin", "biomedical"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete maintenance records")
 
     # Get existing maintenance and verify it belongs to the hospital
     db_maintenance = maintenance_service.get(db, maintenance_id, hospital_id)

@@ -59,30 +59,12 @@ def create_audit_log(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Get hospital ID from current user
-    hospital_id = current_user["user"].hospital_id
-
-    # Verify user exists and belongs to same hospital if user_id is provided
-    if audit_log.user_id:
-        user = db.query(User).filter(User.id == audit_log.user_id).first()
-        if not user:
-            raise HTTPException(status_code=400, detail="User not found")
-        if user.hospital_id != hospital_id:
-            raise HTTPException(status_code=400, detail="User does not belong to this hospital")
-
-    # Verify asset belongs to hospital if entity_type is asset
-    if audit_log.entity_type and audit_log.entity_type.lower() == "asset" and audit_log.entity_id:
-        asset = db.query(Asset).filter(
-            Asset.id == audit_log.entity_id,
-            Asset.hospital_id == hospital_id
-        ).first()
-        if not asset:
-            raise HTTPException(status_code=400, detail="Asset does not belong to this hospital")
-
-    # Prepare audit log data
-    audit_log_data = audit_log.dict()
-
-    return audit_service.create(db, obj_in=audit_log_data)
+    # Audit logs must be treated as immutable - users cannot create them manually
+    # They are only created internally by backend business operations
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Manual creation of audit logs is not allowed"
+    )
 
 
 @router.put("/{audit_id}", response_model=AuditLogResponse)
@@ -92,16 +74,11 @@ def update_audit_log(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Get hospital ID from current user
-    hospital_id = current_user["user"].hospital_id
-
-    # Get existing audit log and verify it belongs to the hospital
-    db_audit_log = audit_service.get(db, audit_id, hospital_id)
-    if db_audit_log is None:
-        raise HTTPException(status_code=404, detail="Audit log not found")
-
-    # Update audit log
-    return audit_service.update(db, db_obj=db_audit_log, obj_in=audit_log)
+    # Audit logs must be treated as immutable - users cannot update them
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Modification of audit logs is not allowed"
+    )
 
 
 @router.delete("/{audit_id}")
@@ -110,14 +87,8 @@ def delete_audit_log(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Get hospital ID from current user
-    hospital_id = current_user["user"].hospital_id
-
-    # Get existing audit log and verify it belongs to the hospital
-    db_audit_log = audit_service.get(db, audit_id, hospital_id)
-    if db_audit_log is None:
-        raise HTTPException(status_code=404, detail="Audit log not found")
-
-    # Delete audit log
-    audit_service.remove(db, id=audit_id)
-    return {"message": "Audit log deleted successfully"}
+    # Audit logs must be treated as immutable - users cannot delete them
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Deletion of audit logs is not allowed"
+    )

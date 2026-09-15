@@ -145,7 +145,7 @@ class User(Base):
     # Relationships
     hospital = relationship("Hospital", back_populates="users")
     role = relationship("Role", back_populates="users")
-    department = relationship("Department")
+    department = relationship("Department", foreign_keys=[department_id])
     managed_departments = relationship("Department", foreign_keys="[Department.manager_id]", back_populates="manager")
     uploaded_documents = relationship("AssetDocument", back_populates="uploader")
     moved_assets = relationship("AssetMovement", foreign_keys="[AssetMovement.moved_by]", back_populates="mover")
@@ -423,7 +423,6 @@ class Asset(Base):
     compliance_records = relationship("Compliance", back_populates="asset")
     documents = relationship("AssetDocument", back_populates="asset")
     movement_history = relationship("AssetMovement", back_populates="asset")
-    audit_logs = relationship("AuditLog", back_populates="asset")
 
 
 class Maintenance(Base):
@@ -726,7 +725,6 @@ class AuditLog(Base):
 
     # Relationships
     user = relationship("User")
-    asset = relationship("Asset", back_populates="audit_logs")
 
 
 class Notification(Base):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.dependencies import get_current_user
 from app.database import get_db
@@ -15,6 +15,32 @@ router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"],
 )
+
+
+@router.get("/staff")
+def get_staff(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to view staff")
+
+    hospital_id = current_user["user"].hospital_id
+    users = db.execute(
+        select(User).where(User.hospital_id == hospital_id)
+    ).scalars().all()
+
+    return [
+        {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "status": user.status,
+        }
+        for user in users
+    ]
+
+
 @router.get("/me")
 def get_me(
     current_user=Depends(get_current_user),
@@ -25,9 +51,11 @@ def get_me(
     return {
         "id": user.id,
         "hospital_id": user.hospital_id,
+        "hospital_name": user.hospital.name,
         "full_name": user.full_name,
         "email": user.email,
         "role": role,
+        "department_id": user.department_id,
     }
 
 @router.post("/register-hospital")
@@ -76,9 +104,7 @@ def register_hospital(
     # --------------------------------
 
     admin_role = db.execute(
-        select(Role).where(
-            Role.code == "ADMIN"
-        )
+        select(Role).where(func.lower(Role.code) == "admin")
     ).scalar_one_or_none()
 
     if not admin_role:
@@ -251,8 +277,10 @@ def login(
         "user": {
             "id": user.id,
             "hospital_id": user.hospital_id,
+            "hospital_name": hospital.name,
             "full_name": user.full_name,
             "email": user.email,
             "role": role_code,
+            "department_id": user.department_id,
         },
     }

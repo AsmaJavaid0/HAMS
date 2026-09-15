@@ -265,6 +265,15 @@ class AuditLogBase(BaseModel):
 class AuditLogCreate(AuditLogBase):
     pass
 
+class AuditLogUpdate(BaseModel):
+    action: Optional[str] = Field(None, min_length=1, max_length=100)
+    entity_type: Optional[str] = Field(None, min_length=1, max_length=50)
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = Field(None, max_length=255)
+    changes: Optional[str] = None
+    ip_address: Optional[str] = Field(None, max_length=45)
+    user_agent: Optional[str] = Field(None, max_length=500)
+
 class AuditLogResponse(AuditLogBase):
     id: int
     created_at: datetime

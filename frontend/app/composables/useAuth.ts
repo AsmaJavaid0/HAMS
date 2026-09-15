@@ -1,8 +1,11 @@
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { $fetch } from 'ofetch'
 
 import {
   navigateTo,
-  useCookie
+  useCookie,
+  useRuntimeConfig,
+  useState
 } from '#app'
 
 import type {
@@ -14,168 +17,22 @@ import {
   getRoleHome
 } from '~/config/permissions'
 
-type DemoAccount = {
-  password: string
-  user: User
-}
-
-/*
-|--------------------------------------------------------------------------
-| DEMO ACCOUNTS
-|--------------------------------------------------------------------------
-|
-| Backend / Supabase abhi connected nahi hai.
-| Is liye Sprint 1 frontend testing ke liye fixed demo accounts use
-| kar rahe hain.
-|
-| Later sirf login implementation replace hogi.
-| UI aur RBAC architecture same rahega.
-|
-*/
-
-const DEMO_ACCOUNTS:
-Record<string, DemoAccount> = {
-
-  /*
-  |--------------------------------------------------------------------------
-  | ADMIN
-  |--------------------------------------------------------------------------
-  */
-
-  'admin@assetcare.test': {
-    password: 'Demo@123',
-
-    user: {
-      id: 'usr-admin-001',
-
-      name: 'Sarah Mitchell',
-
-      email: 'admin@assetcare.test',
-
-      role: 'admin',
-
-      hospital_id: 'hosp-001',
-
-      hospital_name:
-        'AssetCare Demo Hospital',
-
-      department_id: null,
-
-      department_name: null,
-
-      scope: 'hospital'
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | MANAGER
-  |--------------------------------------------------------------------------
-  */
-
-  'manager@assetcare.test': {
-    password: 'Demo@123',
-
-    user: {
-      id: 'usr-manager-001',
-
-      name: 'James Wilson',
-
-      email: 'manager@assetcare.test',
-
-      role: 'manager',
-
-      hospital_id: 'hosp-001',
-
-      hospital_name:
-        'AssetCare Demo Hospital',
-
-      department_id:
-        'dept-icu',
-
-      department_name:
-        'Intensive Care Unit',
-
-      scope: 'department'
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | BIOMEDICAL
-  |--------------------------------------------------------------------------
-  */
-
-  'biomedical@assetcare.test': {
-    password: 'Demo@123',
-
-    user: {
-      id: 'usr-biomedical-001',
-
-      name: 'Daniel Kim',
-
-      email:
-        'biomedical@assetcare.test',
-
-      role: 'biomedical',
-
-      hospital_id:
-        'hosp-001',
-
-      hospital_name:
-        'AssetCare Demo Hospital',
-
-      department_id:
-        'dept-biomedical',
-
-      department_name:
-        'Biomedical Engineering',
-
-      scope: 'hospital'
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | NURSE
-  |--------------------------------------------------------------------------
-  */
-
-  'nurse@assetcare.test': {
-    password: 'Demo@123',
-
-    user: {
-      id: 'usr-nurse-001',
-
-      name: 'Emily Carter',
-
-      email:
-        'nurse@assetcare.test',
-
-      role: 'nurse',
-
-      hospital_id:
-        'hosp-001',
-
-      hospital_name:
-        'AssetCare Demo Hospital',
-
-      department_id:
-        'dept-icu',
-
-      department_name:
-        'Intensive Care Unit',
-
-      scope: 'department'
-    }
+type BackendLoginResponse = {
+  access_token: string
+  user: {
+    id: number
+    hospital_id: number
+    hospital_name: string
+    full_name: string
+    email: string
+    role: UserRole
+    department_id: number | null
   }
 }
 
 export const useAuth = () => {
 
-const {
-  getStaffByEmail
-} = useStaff()
+  const errorMessage = ref('')
 
   /*
   |--------------------------------------------------------------------------
@@ -183,7 +40,7 @@ const {
   |--------------------------------------------------------------------------
   */
 
-  const token =
+  const tokenCookie =
     useCookie<string | null>(
       'auth_token',
       {
@@ -194,7 +51,7 @@ const {
       }
     )
 
-  const user =
+  const userCookie =
     useCookie<User | null>(
       'auth_user',
       {
@@ -203,6 +60,18 @@ const {
 
         sameSite: 'lax'
       }
+    )
+
+  const token =
+    useState<string | null>(
+      'auth-token',
+      () => tokenCookie.value
+    )
+
+  const user =
+    useState<User | null>(
+      'auth-user',
+      () => userCookie.value
     )
 
   /*
@@ -236,73 +105,61 @@ const {
     password: string
   ): Promise<boolean> => {
 
-    const normalizedEmail =
-      email
-        .trim()
-        .toLowerCase()
+    const apiBase =
+      useRuntimeConfig().public.apiBase
 
-    const account =
-      DEMO_ACCOUNTS[
-        normalizedEmail
-      ]
+    try {
+      errorMessage.value = ''
 
-    /*
-    |--------------------------------------------------------------------------
-    | INVALID LOGIN
-    |--------------------------------------------------------------------------
-    */
+      const response =
+        await $fetch<BackendLoginResponse>(
+          '/api/auth/login',
+          {
+            baseURL: apiBase,
+            method: 'POST',
+            body: { email, password }
+          }
+        )
 
-    if (
-      !account ||
-      account.password !== password
-    ) {
+      token.value = response.access_token
+      tokenCookie.value = response.access_token
+
+      user.value = {
+        id: String(response.user.id),
+        name: response.user.full_name,
+        email: response.user.email,
+        role: response.user.role,
+        hospital_id: String(response.user.hospital_id),
+        hospital_name: response.user.hospital_name,
+        department_id: response.user.department_id === null
+          ? null
+          : String(response.user.department_id),
+        scope: response.user.role === 'nurse'
+          ? 'department'
+          : 'hospital'
+      }
+      userCookie.value = user.value
+
+      await nextTick()
+
+      await navigateTo(
+        getRoleHome(response.user.role)
+      )
+
+      return true
+    } catch (error: any) {
       token.value = null
       user.value = null
+      tokenCookie.value = null
+      userCookie.value = null
+      errorMessage.value =
+        error?.data?.detail ??
+        error?.message ??
+        'Unable to reach the authentication service.'
 
       return false
     }
 
-    const staffProfile =
-      getStaffByEmail(
-        normalizedEmail
-      )
-
-    if (
-      staffProfile &&
-      staffProfile.status !== 'Active'
-    ) {
-      token.value = null
-      user.value = null
-
-      return false
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CREATE DEMO SESSION
-    |--------------------------------------------------------------------------
-    */
-
-    token.value =
-      `demo-token-${Date.now()}`
-
-    user.value = {
-      ...account.user
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ROLE DASHBOARD
-    |--------------------------------------------------------------------------
-    */
-
-    await navigateTo(
-      getRoleHome(
-        account.user.role
-      )
-    )
-
-    return true
   }
 
   /*
@@ -314,6 +171,8 @@ const {
   const logout = async () => {
     token.value = null
     user.value = null
+    tokenCookie.value = null
+    userCookie.value = null
 
     await navigateTo(
       '/auth/login'
@@ -350,6 +209,7 @@ const {
 
     isAuthenticated,
     userRole,
+    errorMessage,
 
     login,
     logout,

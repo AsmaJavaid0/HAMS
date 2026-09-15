@@ -1,41 +1,62 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { $fetch } from 'ofetch'
+import { useRuntimeConfig } from '#app'
+import { useAuth } from '~/composables/useAuth'
+
 definePageMeta({ layout: 'dashboard' })
 
-const { user } = useAuth()
-const { hospital } = useHospital()
-const { assets } = useAssets()
-const { departments } = useDepartments()
-const { locations } = useLocations()
-const { staffMembers } = useStaff()
-const { auditEvents } = useAuditLog()
+type DashboardRecord = { id: number }
 
-const hospitalId = computed(() => user.value?.hospital_id ?? '')
+const { user, token } = useAuth()
+const apiBase = useRuntimeConfig().public.apiBase
+const assets = ref<DashboardRecord[]>([])
+const departments = ref<DashboardRecord[]>([])
+const locations = ref<Array<DashboardRecord & { type: string }>>([])
+const staff = ref<DashboardRecord[]>([])
+const recentActivity = ref<Array<{
+  id: number
+  action: string
+  entityName: string
+  description: string
+  timestamp: string
+}>>([])
 
-const hospitalAssets = computed(() =>
-  assets.value.filter(asset => asset.hospitalId === hospitalId.value)
-)
+const hospital = computed(() => ({
+  name: user.value?.hospital_name ?? 'Hospital'
+}))
 
-const hospitalDepartments = computed(() =>
-  departments.value.filter(department => department.hospitalId === hospitalId.value)
-)
+const headers = computed(() => ({
+  Authorization: `Bearer ${token.value}`
+}))
 
-const hospitalLocations = computed(() =>
-  locations.value.filter(location => location.hospitalId === hospitalId.value)
-)
+onMounted(async () => {
+  try {
+    const [assetData, departmentData, locationData, staffData] = await Promise.all([
+      $fetch<DashboardRecord[]>('/api/assets/', { baseURL: apiBase, headers: headers.value }),
+      $fetch<DashboardRecord[]>('/api/departments/', { baseURL: apiBase, headers: headers.value }),
+      $fetch<Array<DashboardRecord & { type: string }>>('/api/locations/', { baseURL: apiBase, headers: headers.value }),
+      $fetch<DashboardRecord[]>('/api/auth/staff', { baseURL: apiBase, headers: headers.value })
+    ])
+
+    assets.value = assetData
+    departments.value = departmentData
+    locations.value = locationData
+    staff.value = staffData
+  } catch {
+    // The page remains usable while the API is unavailable.
+  }
+})
+
+const hospitalAssets = computed(() => assets.value)
+const hospitalDepartments = computed(() => departments.value)
+const hospitalLocations = computed(() => locations.value)
 
 const hospitalBuildings = computed(() =>
   hospitalLocations.value.filter(location => location.type === 'Building')
 )
 
-const hospitalStaff = computed(() =>
-  staffMembers.value.filter(staff => staff.hospitalId === hospitalId.value)
-)
-
-const recentActivity = computed(() =>
-  auditEvents.value
-    .filter(event => event.hospitalId === hospitalId.value)
-    .slice(0, 5)
-)
+const hospitalStaff = computed(() => staff.value)
 </script>
 
 <template>

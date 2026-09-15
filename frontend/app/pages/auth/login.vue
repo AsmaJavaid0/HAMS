@@ -1,5 +1,5 @@
 <!-- <script setup lang="ts">
-const { login } = useAuth()
+const { login, errorMessage } = useAuth()
 // definePageMeta({
 //   layout: 'auth'
 // })
@@ -79,11 +79,14 @@ const validateForm = async () => {
   isLoading.value = false
 
   if (!success) {
-    loginError.value = 'Unable to sign in. Please try again.'
+    loginError.value = errorMessage.value
   }
 }
 </script> -->
 <script setup lang="ts">
+import { ref } from 'vue'
+
+import { useAuth } from '~/composables/useAuth'
 
 definePageMeta({
   layout: 'auth'

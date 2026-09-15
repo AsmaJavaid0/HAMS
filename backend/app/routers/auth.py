@@ -218,6 +218,20 @@ def login(
             detail="User role is not configured.",
         )
 
+    role_code = str(role.code).strip().lower()
+
+    if role_code == "manager":
+        raise HTTPException(
+            status_code=403,
+            detail="Legacy Manager role is not supported in V1.",
+        )
+
+    if role_code not in {"admin", "nurse", "biomedical"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Unsupported role for this application.",
+        )
+
     # --------------------------------
     # Create JWT
     # --------------------------------
@@ -226,7 +240,7 @@ def login(
         {
             "sub": str(user.id),
             "hospital_id": str(user.hospital_id),
-            "role": role.code,
+            "role": role_code,
         }
     )
 
@@ -239,6 +253,6 @@ def login(
             "hospital_id": user.hospital_id,
             "full_name": user.full_name,
             "email": user.email,
-            "role": role.code,
+            "role": role_code,
         },
     }

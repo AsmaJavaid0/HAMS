@@ -20,6 +20,19 @@ def get_current_user(
     payload = decode_access_token(token)
 
     user_id = int(payload["sub"])
+    role = str(payload.get("role", "")).lower()
+
+    if role == "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Legacy Manager role is not supported in V1.",
+        )
+
+    if role not in {"admin", "nurse", "biomedical"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unsupported role for this application.",
+        )
 
     user = db.get(User, user_id)
 
@@ -33,5 +46,5 @@ def get_current_user(
 
     return {
         "user": user,
-        "role": payload["role"],
+        "role": role,
     }

@@ -145,7 +145,7 @@ class MaintenanceBase(BaseModel):
     next_maintenance_date: Optional[datetime] = None
 
 class MaintenanceCreate(MaintenanceBase):
-    pass
+    asset_id: int
 
 class MaintenanceUpdate(BaseModel):
     maintenance_date: Optional[datetime] = None
@@ -176,7 +176,7 @@ class ComplianceBase(BaseModel):
     notes: Optional[str] = None
 
 class ComplianceCreate(ComplianceBase):
-    pass
+    asset_id: int
 
 class ComplianceUpdate(BaseModel):
     certification_name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -198,6 +198,7 @@ class ComplianceResponse(ComplianceBase):
 
 # Asset Document Schemas
 class AssetDocumentBase(BaseModel):
+    asset_id: int
     document_name: str = Field(min_length=1, max_length=255)
     document_type: str = Field(min_length=1, max_length=100)
     file_url: str = Field(min_length=1, max_length=500)
@@ -206,9 +207,15 @@ class AssetDocumentBase(BaseModel):
 class AssetDocumentCreate(AssetDocumentBase):
     pass
 
+class AssetDocumentUpdate(BaseModel):
+    asset_id: Optional[int] = None
+    document_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    document_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    file_url: Optional[str] = Field(None, min_length=1, max_length=500)
+    uploaded_by: Optional[int] = None
+
 class AssetDocumentResponse(AssetDocumentBase):
     id: int
-    asset_id: int
     uploaded_at: datetime
 
     class Config:
@@ -216,20 +223,29 @@ class AssetDocumentResponse(AssetDocumentBase):
 
 # Asset Movement Schemas
 class AssetMovementBase(BaseModel):
+    asset_id: int
     from_department_id: Optional[int] = None
     to_department_id: Optional[int] = None
     from_location_id: Optional[int] = None
     to_location_id: Optional[int] = None
-    moved_by: int
     movement_date: datetime
     notes: Optional[str] = None
 
 class AssetMovementCreate(AssetMovementBase):
     pass
 
+class AssetMovementUpdate(BaseModel):
+    asset_id: Optional[int] = None
+    from_department_id: Optional[int] = None
+    to_department_id: Optional[int] = None
+    from_location_id: Optional[int] = None
+    to_location_id: Optional[int] = None
+    movement_date: Optional[datetime] = None
+    notes: Optional[str] = None
+
 class AssetMovementResponse(AssetMovementBase):
     id: int
-    asset_id: int
+    moved_by: int
     created_at: datetime
 
     class Config:

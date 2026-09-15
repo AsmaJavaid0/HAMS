@@ -105,13 +105,14 @@ def create_movement(
         if not to_loc:
             raise HTTPException(status_code=400, detail="To location does not belong to this hospital")
 
-    # Verify mover exists and belongs to hospital
-    mover = db.query(User).filter(User.id == movement.moved_by).first()
+    # Derive mover from authenticated user, not client input.
+    mover = db.query(User).filter(User.id == current_user["user"].id).first()
     if not mover or mover.hospital_id != hospital_id:
-        raise HTTPException(status_code=400, detail="Mover does not belong to this hospital")
+        raise HTTPException(status_code=400, detail="Authenticated user does not belong to this hospital")
 
     # Prepare movement data
-    movement_data = movement.dict()
+    movement_data = movement.dict(exclude={"moved_by"}) if "moved_by" in movement.dict() else movement.dict()
+    movement_data["moved_by"] = current_user["user"].id
 
     return movement_service.create(db, obj_in=movement_data)
 
